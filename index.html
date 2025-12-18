@@ -69,7 +69,7 @@
       </div>
 
       <div class="hint">
-        If login doesn’t work: Spotify Redirect URI must match this page URL exactly.
+        If login works but nothing loads: open DevTools Console to see any errors (this page also prints errors in the status box).
       </div>
 
       <div class="hr"></div>
@@ -146,10 +146,7 @@
 
 <script>
 /* ================== CONFIG (EDIT THESE 2 LINES) ================== */
-// 1) Paste your Spotify Client ID here:
 const SPOTIFY_CLIENT_ID = "e70a33848ea14a359b903da31a27b38b";
-
-// 2) This MUST match a Redirect URI in your Spotify app settings:
 const REDIRECT_URI = "https://b3d001f9.djroyalty-save-the-set.pages.dev";
 /* ================================================================= */
 
@@ -177,15 +174,11 @@ const SEARCH_SEEDS = {
   "Island/Caribbean": ["dancehall hits", "soca hits", "reggae hits"]
 };
 
-const LS_TOKEN = "djroyalty_spotify_token_v2";
-const SS_VERIFIER = "djroyalty_spotify_verifier_v2";
-const SS_STATE = "djroyalty_spotify_state_v2";
+const LS_TOKEN = "djroyalty_spotify_token_v3";
+const SS_VERIFIER = "djroyalty_spotify_verifier_v3";
+const SS_STATE = "djroyalty_spotify_state_v3";
 
-const state = {
-  genre: "Hip-Hop",
-  loaded: [],
-  filtered: []
-};
+const state = { genre: "Hip-Hop", loaded: [], filtered: [] };
 
 const el = (id) => document.getElementById(id);
 const normalize = (s) => (s ?? "").toString().trim().toLowerCase();
@@ -200,12 +193,22 @@ function escapeHtml(str) {
 }
 function setStatus(msg, isError=false){
   const s = el("status");
+  if (!s) return;
   s.innerHTML = isError ? `<span class="error">${escapeHtml(msg)}</span>` : escapeHtml(msg);
 }
 
-function saveToken(tokenObj) {
-  localStorage.setItem(LS_TOKEN, JSON.stringify(tokenObj));
-}
+/* ===== PATCH 1: Error reporting (shows exact break reason) ===== */
+window.addEventListener("error", (e) => {
+  console.error("JS Error:", e.error || e.message);
+  setStatus("JS Error: " + (e.error?.message || e.message), true);
+});
+window.addEventListener("unhandledrejection", (e) => {
+  console.error("Unhandled Promise Rejection:", e.reason);
+  setStatus("Promise Error: " + (e.reason?.message || e.reason), true);
+});
+/* =============================================================== */
+
+function saveToken(tokenObj) { localStorage.setItem(LS_TOKEN, JSON.stringify(tokenObj)); }
 function loadToken() {
   try {
     const raw = localStorage.getItem(LS_TOKEN);
@@ -215,13 +218,8 @@ function loadToken() {
     return t;
   } catch { return null; }
 }
-function clearToken() {
-  localStorage.removeItem(LS_TOKEN);
-}
-function tokenValid(t) {
-  if (!t) return false;
-  return Date.now() < (t.expires_at - 30_000);
-}
+function clearToken() { localStorage.removeItem(LS_TOKEN); }
+function tokenValid(t) { return !!t && Date.now() < (t.expires_at - 30_000); }
 
 /* ------------------ PKCE Helpers ------------------ */
 function randomString(len=64) {
@@ -263,7 +261,6 @@ async function startSpotifyLogin() {
   sessionStorage.setItem(SS_VERIFIER, verifier);
   sessionStorage.setItem(SS_STATE, stateParam);
 
-  // NOTE: scopes are not required for the endpoints we use, but leaving empty is fine.
   const params = new URLSearchParams({
     response_type: "code",
     client_id: SPOTIFY_CLIENT_ID,
@@ -331,7 +328,6 @@ async function handleSpotifyRedirect() {
   };
   saveToken(tokenObj);
 
-  // Clean the URL so the code/state don't stay in the address bar
   url.searchParams.delete("code");
   url.searchParams.delete("state");
   url.searchParams.delete("error");
@@ -375,10 +371,7 @@ async function fetch50ByRecommendations(genreClicked, token) {
   });
 
   const res = await spotifyGET(`/v1/recommendations?${params.toString()}`, token);
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Recommendations failed (${res.status}): ${text}`);
-  }
+  if (!res.ok) throw new Error(await res.text());
   const data = await res.json();
   return data.tracks || [];
 }
@@ -396,10 +389,7 @@ async function fetch50BySearchFallback(genreClicked, token) {
   });
 
   const res = await spotifyGET(`/v1/search?${params.toString()}`, token);
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Search failed (${res.status}): ${text}`);
-  }
+  if (!res.ok) throw new Error(await res.text());
   const data = await res.json();
   return data?.tracks?.items || [];
 }
@@ -407,10 +397,7 @@ async function fetch50BySearchFallback(genreClicked, token) {
 async function fetchAudioFeatures(trackIds, token) {
   const ids = trackIds.join(",");
   const res = await spotifyGET(`/v1/audio-features?ids=${encodeURIComponent(ids)}`, token);
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Audio features failed (${res.status}): ${text}`);
-  }
+  if (!res.ok) throw new Error(await res.text());
   const data = await res.json();
   return data.audio_features || [];
 }
@@ -425,11 +412,8 @@ async function loadGenreSpotify(genreClicked) {
   setStatus(`Loading 50 ${genreClicked} tracks...`);
 
   let tracks = [];
-  try {
-    tracks = await fetch50ByRecommendations(genreClicked, token);
-  } catch {
-    tracks = await fetch50BySearchFallback(genreClicked, token);
-  }
+  try { tracks = await fetch50ByRecommendations(genreClicked, token); }
+  catch { tracks = await fetch50BySearchFallback(genreClicked, token); }
 
   const ids = tracks.map(t => t.id).filter(Boolean);
   const features = await fetchAudioFeatures(ids, token);
@@ -534,19 +518,27 @@ function wireInputs() {
   });
 }
 
-/* ------------------ Init ------------------ */
-(async function init(){
-  buildTabs();
-  wireInputs();
-  await handleSpotifyRedirect();
+/* ===== PATCH 2: DOM-safe init + redirect handling ===== */
+document.addEventListener("DOMContentLoaded", async () => {
+  try {
+    buildTabs();
+    wireInputs();
 
-  const token = loadToken();
-  if (tokenValid(token)) {
-    setStatus("Spotify connected ✅ Click a genre to load 50 tracks with BPM + Year.");
-  } else {
-    setStatus("Click “Connect Spotify (for BPM)” to enable auto genre loading.");
+    // Handle redirect after UI exists
+    await handleSpotifyRedirect();
+
+    const token = loadToken();
+    if (tokenValid(token)) {
+      setStatus("Spotify connected ✅ Click a genre to load 50 tracks with BPM + Year.");
+    } else {
+      setStatus("Click “Connect Spotify (for BPM)” to enable auto genre loading.");
+    }
+  } catch (err) {
+    console.error("Init failed:", err);
+    setStatus("Init failed: " + (err?.message || err), true);
   }
-})();
+});
+/* ===================================================== */
 </script>
 </body>
 </html>
