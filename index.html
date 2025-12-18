@@ -331,7 +331,7 @@ async function handleSpotifyRedirect() {
   url.searchParams.delete("code");
   url.searchParams.delete("state");
   url.searchParams.delete("error");
-  window.history.replaceState({}, document.title, url.toString());
+  window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
 
   setStatus("Spotify connected ✅ Now click a genre to load 50 tracks with BPM + Year.");
 }
@@ -397,8 +397,22 @@ async function fetch50BySearchFallback(genreClicked, token) {
 async function fetchAudioFeatures(trackIds, token) {
   const ids = trackIds.join(",");
   const res = await spotifyGET(`/v1/audio-features?ids=${encodeURIComponent(ids)}`, token);
-  if (!res.ok) throw new Error(await res.text());
-  const data = await res.json();
+
+  // Read the raw body first so we can log real Spotify errors
+  const text = await res.text();
+
+  // 403 happens for some app/account states. Don’t crash the app.
+  if (res.status === 403) {
+    console.warn("Audio-features 403 body:", text);
+    // Graceful fallback: songs still load, BPM will show "—"
+    return [];
+  }
+
+  if (!res.ok) {
+    throw new Error(`Audio features failed (${res.status}): ${text}`);
+  }
+
+  const data = JSON.parse(text);
   return data.audio_features || [];
 }
 
@@ -416,8 +430,17 @@ async function loadGenreSpotify(genreClicked) {
   catch { tracks = await fetch50BySearchFallback(genreClicked, token); }
 
   const ids = tracks.map(t => t.id).filter(Boolean);
-  const features = await fetchAudioFeatures(ids, token);
-  const featMap = new Map(features.filter(Boolean).map(f => [f.id, f]));
+
+let features = [];
+try {
+  features = await fetchAudioFeatures(ids, token);
+} catch (e) {
+  console.warn("Audio-features failed, continuing without BPM:", e);
+  features = [];
+}
+
+const featMap = new Map(features.filter(Boolean).map(f => [f.id, f]));
+
 
   const mapped = tracks.map(t => {
     const f = featMap.get(t.id);
