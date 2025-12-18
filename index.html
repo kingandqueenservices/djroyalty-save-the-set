@@ -43,7 +43,6 @@
     .error{color:#ffb4b4}
     .hr{height:1px;background:var(--line); margin:12px 0;}
     .hint{font-size:12px;color:var(--muted); margin-top:6px}
-    .kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:12px; padding:2px 6px; border-radius:8px; background:#0f0f18; border:1px solid var(--line);}
     a{color:#ffd9a0}
   </style>
 </head>
@@ -70,7 +69,7 @@
       </div>
 
       <div class="hint">
-        If you see “redirect_uri mismatch”, your Spotify app Redirect URI must EXACTLY match this page URL.
+        If login doesn’t work: Spotify Redirect URI must match this page URL exactly.
       </div>
 
       <div class="hr"></div>
@@ -82,7 +81,7 @@
 
       <div class="row" style="margin-top:10px">
         <div class="field" style="flex:1">
-          <label>Optional filter (after load): Search Artist/Title</label>
+          <label>Filter current results (Artist/Title)</label>
           <input id="q" placeholder="Type to filter the loaded 50..." />
         </div>
       </div>
@@ -138,7 +137,7 @@
       </div>
 
       <div class="footerNote small">
-        BPM comes from Spotify Audio Features (tempo). :contentReference[oaicite:6]{index=6}
+        Tip: After connecting, click a genre to load 50 tracks with BPM + Year.
       </div>
     </section>
 
@@ -146,24 +145,16 @@
 </main>
 
 <script>
-/**
- * DJ Royalty – Save-The-Set™
- * Spotify Authorization Code with PKCE (recommended for SPAs). :contentReference[oaicite:7]{index=7}
- * Uses:
- * - /v1/recommendations (if available) OR fallback /v1/search :contentReference[oaicite:8]{index=8}
- * - /v1/audio-features?ids=... for tempo (BPM) :contentReference[oaicite:9]{index=9}
- */
+/* ================== CONFIG (EDIT THESE 2 LINES) ================== */
+// 1) Paste your Spotify Client ID here:
+const SPOTIFY_CLIENT_ID = "e70a33848ea14a359b903da31a27b38b";
 
-/* ================== CONFIG (YOU MUST EDIT THESE 2) ================== */
-const SPOTIFY_CLIENT_ID = "YOUR_REAL_CLIENT_ID";
+// 2) This MUST match a Redirect URI in your Spotify app settings:
 const REDIRECT_URI = "https://b3d001f9.djroyalty-save-the-set.pages.dev";
-
- // EXACT page URL registered in Spotify app settings"; // EXACT page URL registered in Spotify app settings
-/* =================================================================== */
+/* ================================================================= */
 
 const GENRES = ["Hip-Hop","R&B","Amapiano","House","Pop","Techno","Reggaeton","Island/Caribbean"];
-// Spotify seed genres are specific strings. We'll map your genres to Spotify-ish seeds.
-// If recommendations endpoint errors/404, we fall back to Search queries.
+
 const SPOTIFY_SEED_GENRES = {
   "Hip-Hop": ["hip-hop","rap","trap"],
   "R&B": ["r-n-b","soul"],
@@ -174,29 +165,31 @@ const SPOTIFY_SEED_GENRES = {
   "Reggaeton": ["reggaeton","latin"],
   "Island/Caribbean": ["dancehall","reggae","soca"]
 };
+
 const SEARCH_SEEDS = {
   "Hip-Hop": ["hip hop hits", "rap club", "trap hits"],
   "R&B": ["r&b party", "r&b hits", "soul r&b"],
-  "Amapiano": ["amapiano", "log drum", "kabza de small"],
+  "Amapiano": ["amapiano", "log drum", "kabza de small", "dj maphorisa"],
   "House": ["house hits", "deep house", "classic house"],
   "Pop": ["pop hits", "dance pop", "top pop"],
   "Techno": ["techno", "warehouse techno", "peak time techno"],
   "Reggaeton": ["reggaeton hits", "latin urbano", "perreo"],
-  "Island/Caribbean": ["dancehall hits", "soca", "reggae hits"]
+  "Island/Caribbean": ["dancehall hits", "soca hits", "reggae hits"]
 };
 
-const LS_TOKEN = "djroyalty_spotify_token_v1";
-const LS_VERIFIER = "djroyalty_spotify_verifier_v1";
-const LS_STATE = "djroyalty_spotify_state_v1";
+const LS_TOKEN = "djroyalty_spotify_token_v2";
+const SS_VERIFIER = "djroyalty_spotify_verifier_v2";
+const SS_STATE = "djroyalty_spotify_state_v2";
 
 const state = {
   genre: "Hip-Hop",
-  loaded: [],     // last loaded 50
-  filtered: []    // view after filters
+  loaded: [],
+  filtered: []
 };
 
 const el = (id) => document.getElementById(id);
 const normalize = (s) => (s ?? "").toString().trim().toLowerCase();
+
 function escapeHtml(str) {
   return (str ?? "").toString()
     .replaceAll("&","&amp;")
@@ -210,7 +203,27 @@ function setStatus(msg, isError=false){
   s.innerHTML = isError ? `<span class="error">${escapeHtml(msg)}</span>` : escapeHtml(msg);
 }
 
-/* ------------------ PKCE Helpers (Browser-safe) ------------------ */
+function saveToken(tokenObj) {
+  localStorage.setItem(LS_TOKEN, JSON.stringify(tokenObj));
+}
+function loadToken() {
+  try {
+    const raw = localStorage.getItem(LS_TOKEN);
+    if (!raw) return null;
+    const t = JSON.parse(raw);
+    if (!t?.access_token || !t?.expires_at) return null;
+    return t;
+  } catch { return null; }
+}
+function clearToken() {
+  localStorage.removeItem(LS_TOKEN);
+}
+function tokenValid(t) {
+  if (!t) return false;
+  return Date.now() < (t.expires_at - 30_000);
+}
+
+/* ------------------ PKCE Helpers ------------------ */
 function randomString(len=64) {
   const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
   const bytes = new Uint8Array(len);
@@ -232,35 +245,14 @@ async function pkceChallengeFromVerifier(verifier) {
   return base64UrlEncode(hashed);
 }
 
-/* ------------------ Token Storage ------------------ */
-function saveToken(tokenObj) {
-  localStorage.setItem(LS_TOKEN, JSON.stringify(tokenObj));
-}
-function loadToken() {
-  try {
-    const raw = localStorage.getItem(LS_TOKEN);
-    if (!raw) return null;
-    const t = JSON.parse(raw);
-    if (!t?.access_token || !t?.expires_at) return null;
-    return t;
-  } catch { return null; }
-}
-function clearToken() {
-  localStorage.removeItem(LS_TOKEN);
-}
-function tokenValid(t) {
-  if (!t) return false;
-  return Date.now() < (t.expires_at - 30_000); // 30s safety margin
-}
-
 /* ------------------ Spotify Auth (PKCE) ------------------ */
 async function startSpotifyLogin() {
   if (!SPOTIFY_CLIENT_ID || SPOTIFY_CLIENT_ID.includes("PASTE_")) {
     setStatus("Set SPOTIFY_CLIENT_ID in the code first.", true);
     return;
   }
-  if (!REDIRECT_URI || REDIRECT_URI.includes("PASTE_")) {
-    setStatus("Set REDIRECT_URI (your exact page URL) in the code first.", true);
+  if (!REDIRECT_URI || !REDIRECT_URI.startsWith("http")) {
+    setStatus("REDIRECT_URI is not set correctly.", true);
     return;
   }
 
@@ -268,9 +260,10 @@ async function startSpotifyLogin() {
   const challenge = await pkceChallengeFromVerifier(verifier);
   const stateParam = randomString(24);
 
-  localStorage.setItem(LS_VERIFIER, verifier);
-  localStorage.setItem(LS_STATE, stateParam);
+  sessionStorage.setItem(SS_VERIFIER, verifier);
+  sessionStorage.setItem(SS_STATE, stateParam);
 
+  // NOTE: scopes are not required for the endpoints we use, but leaving empty is fine.
   const params = new URLSearchParams({
     response_type: "code",
     client_id: SPOTIFY_CLIENT_ID,
@@ -278,27 +271,13 @@ async function startSpotifyLogin() {
     code_challenge_method: "S256",
     code_challenge: challenge,
     state: stateParam
-    // No scopes needed for recommendations + audio-features (public endpoints),
-    // but Spotify still supports adding scopes if you expand later. :contentReference[oaicite:10]{index=10}
   });
 
   const authUrl = `https://accounts.spotify.com/authorize?${params.toString()}`;
-
-// GoDaddy Website Builder often runs custom HTML in an iframe.
-// Force top-level navigation so the Spotify page actually opens.
-try {
-  if (window.top && window.top !== window) {
-    window.top.location.assign(authUrl);
-  } else {
-    window.location.assign(authUrl);
-  }
-} catch (e) {
-  // Fallback: open a new tab if top navigation is blocked
-  window.open(authUrl, "_blank", "noopener,noreferrer");
-}
+  window.location.assign(authUrl);
 }
 
-async function handleSpotifyRedirect() {console.log("REDIRECT_URI in code =", REDIRECT_URI, "| current page =", window.location.origin + window.location.pathname);
+async function handleSpotifyRedirect() {
   const url = new URL(window.location.href);
   const code = url.searchParams.get("code");
   const returnedState = url.searchParams.get("state");
@@ -310,15 +289,15 @@ async function handleSpotifyRedirect() {console.log("REDIRECT_URI in code =", RE
   }
   if (!code) return;
 
-  const expectedState = localStorage.getItem(LS_STATE);
+  const expectedState = sessionStorage.getItem(SS_STATE);
   if (!expectedState || returnedState !== expectedState) {
     setStatus("Spotify login state mismatch. Try again.", true);
     return;
   }
 
-  const verifier = localStorage.getItem(LS_VERIFIER);
+  const verifier = sessionStorage.getItem(SS_VERIFIER);
   if (!verifier) {
-    setStatus("Missing PKCE verifier. Try connecting again.", true);
+    setStatus("Missing PKCE verifier. Click Connect Spotify again.", true);
     return;
   }
 
@@ -330,45 +309,42 @@ async function handleSpotifyRedirect() {console.log("REDIRECT_URI in code =", RE
     code_verifier: verifier
   });
 
-  try {
-    const res = await fetch("https://accounts.spotify.com/api/token", {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body
-    });
-    if (!res.ok) {
-      const text = await res.text();
-      setStatus(`Token exchange failed. (${res.status}) ${text}`, true);
-      return;
-    }
-    const data = await res.json();
-    const tokenObj = {
-      access_token: data.access_token,
-      token_type: data.token_type,
-      expires_in: data.expires_in,
-      obtained_at: Date.now(),
-      expires_at: Date.now() + (data.expires_in * 1000)
-    };
-    saveToken(tokenObj);
+  const res = await fetch("https://accounts.spotify.com/api/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body
+  });
 
-    // clean URL
-    url.searchParams.delete("code");
-    url.searchParams.delete("state");
-    url.searchParams.delete("error");
-    window.history.replaceState({}, document.title, url.toString());
-
-    setStatus("Spotify connected ✅ Now click a genre to load 50 tracks with BPM.");
-  } catch (e) {
-    setStatus("Token exchange error. Try again.", true);
+  if (!res.ok) {
+    const text = await res.text();
+    setStatus(`Token exchange failed (${res.status}). ${text}`, true);
+    return;
   }
+
+  const data = await res.json();
+  const tokenObj = {
+    access_token: data.access_token,
+    token_type: data.token_type,
+    expires_in: data.expires_in,
+    obtained_at: Date.now(),
+    expires_at: Date.now() + (data.expires_in * 1000)
+  };
+  saveToken(tokenObj);
+
+  // Clean the URL so the code/state don't stay in the address bar
+  url.searchParams.delete("code");
+  url.searchParams.delete("state");
+  url.searchParams.delete("error");
+  window.history.replaceState({}, document.title, url.toString());
+
+  setStatus("Spotify connected ✅ Now click a genre to load 50 tracks with BPM + Year.");
 }
 
-/* ------------------ Spotify API Calls ------------------ */
+/* ------------------ Spotify API ------------------ */
 async function spotifyGET(path, token) {
   const res = await fetch(`https://api.spotify.com${path}`, {
     headers: { Authorization: `Bearer ${token.access_token}` }
   });
-  // If expired mid-call, clear token so UI prompts reconnect
   if (res.status === 401) clearToken();
   return res;
 }
@@ -383,40 +359,35 @@ function shuffle(arr) {
 }
 
 function yearFromReleaseDate(dateStr) {
-  // release_date can be YYYY, YYYY-MM, or YYYY-MM-DD
-  if (!dateStr) return null;
+  if (!dateStr) return "";
   const m = /^(\d{4})/.exec(dateStr);
-  return m ? Number(m[1]) : null;
+  return m ? Number(m[1]) : "";
 }
 
 async function fetch50ByRecommendations(genreClicked, token) {
   const seeds = SPOTIFY_SEED_GENRES[genreClicked] || [];
-  const chosen = shuffle(seeds).slice(0, 2); // limit seeds
-  if (!chosen.length) throw new Error("No seed genres mapped");
+  const chosen = shuffle(seeds).slice(0, 2);
+  if (!chosen.length) throw new Error("No seed genres mapped.");
 
   const params = new URLSearchParams({
     limit: "50",
     seed_genres: chosen.join(",")
   });
 
-  // recommendations endpoint reference :contentReference[oaicite:11]{index=11}
   const res = await spotifyGET(`/v1/recommendations?${params.toString()}`, token);
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Recommendations failed (${res.status}): ${text}`);
   }
   const data = await res.json();
-  const tracks = data.tracks || [];
-  return tracks;
+  return data.tracks || [];
 }
 
 async function fetch50BySearchFallback(genreClicked, token) {
-  // Search endpoint reference :contentReference[oaicite:12]{index=12}
   const seeds = SEARCH_SEEDS[genreClicked] || [genreClicked];
   const seed = seeds[Math.floor(Math.random() * seeds.length)];
+  const offset = Math.floor(Math.random() * 200);
 
-  // Random offset to vary results
-  const offset = Math.floor(Math.random() * 200); // Spotify allows offset up to 1000
   const params = new URLSearchParams({
     q: seed,
     type: "track",
@@ -434,7 +405,6 @@ async function fetch50BySearchFallback(genreClicked, token) {
 }
 
 async function fetchAudioFeatures(trackIds, token) {
-  // Audio Features endpoint reference :contentReference[oaicite:13]{index=13}
   const ids = trackIds.join(",");
   const res = await spotifyGET(`/v1/audio-features?ids=${encodeURIComponent(ids)}`, token);
   if (!res.ok) {
@@ -452,34 +422,27 @@ async function loadGenreSpotify(genreClicked) {
     return;
   }
 
-  setStatus(`Loading 50 ${genreClicked} tracks from Spotify...`);
+  setStatus(`Loading 50 ${genreClicked} tracks...`);
 
   let tracks = [];
   try {
     tracks = await fetch50ByRecommendations(genreClicked, token);
-  } catch (e) {
-    // Fallback if recommendations errors/changes
-    try {
-      tracks = await fetch50BySearchFallback(genreClicked, token);
-    } catch (e2) {
-      setStatus(String(e2.message || e2), true);
-      return;
-    }
+  } catch {
+    tracks = await fetch50BySearchFallback(genreClicked, token);
   }
 
   const ids = tracks.map(t => t.id).filter(Boolean);
   const features = await fetchAudioFeatures(ids, token);
-
   const featMap = new Map(features.filter(Boolean).map(f => [f.id, f]));
+
   const mapped = tracks.map(t => {
     const f = featMap.get(t.id);
-    const year = yearFromReleaseDate(t?.album?.release_date);
     return {
       genre: genreClicked,
       artist: (t.artists || []).map(a => a.name).join(", ") || "",
       title: t.name || "",
       bpm: f?.tempo ? Math.round(f.tempo) : null,
-      year: year ?? "",
+      year: yearFromReleaseDate(t?.album?.release_date),
       _id: `sp|${t.id}`
     };
   }).filter(x => x.artist && x.title);
@@ -489,7 +452,7 @@ async function loadGenreSpotify(genreClicked) {
   setStatus(`Loaded 50 ${genreClicked} tracks with BPM + Year ✅`);
 }
 
-/* ------------------ Table Render + Filters ------------------ */
+/* ------------------ Render + Filters ------------------ */
 function renderRows(list) {
   const rows = el("rows");
   rows.innerHTML = "";
@@ -534,7 +497,7 @@ function applyFiltersAndRender() {
   renderRows(list);
 }
 
-/* ------------------ UI: Tabs ------------------ */
+/* ------------------ Tabs + UI ------------------ */
 function buildTabs() {
   const tabs = el("tabs");
   tabs.innerHTML = "";
@@ -553,7 +516,6 @@ function buildTabs() {
   }
 }
 
-/* ------------------ Buttons ------------------ */
 function disconnectSpotify() {
   clearToken();
   setStatus("Spotify disconnected.");
@@ -588,3 +550,4 @@ function wireInputs() {
 </script>
 </body>
 </html>
+
