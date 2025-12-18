@@ -1,0 +1,588 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>DJ Royalty – Save-The-Set™</title>
+  <style>
+    :root { --bg:#0b0b10; --card:#131321; --muted:#9aa0a6; --text:#f3f4f6; --line:#23233a; --pill:#1b1b2c; }
+    *{box-sizing:border-box}
+    body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial; background:var(--bg); color:var(--text);}
+    header{padding:22px 18px;border-bottom:1px solid var(--line); position:sticky; top:0; background:rgba(11,11,16,.92); backdrop-filter: blur(10px); z-index:10;}
+    .wrap{max-width:1100px;margin:0 auto;}
+    .brand{display:flex;align-items:center;gap:12px;}
+    .logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#fbbf24,#f59e0b,#d97706); box-shadow:0 10px 30px rgba(245,158,11,.25);}
+    h1{font-size:18px;margin:0;line-height:1.2}
+    .sub{font-size:12px;color:var(--muted); margin-top:2px}
+    main{padding:18px}
+    .grid{display:grid;gap:14px; grid-template-columns: 1fr;}
+    @media (min-width: 960px){ .grid{grid-template-columns: 380px 1fr;} }
+    .card{background:var(--card);border:1px solid var(--line); border-radius:18px; padding:14px; box-shadow: 0 18px 50px rgba(0,0,0,.25);}
+    .card h2{font-size:14px;margin:0 0 10px 0;color:#fff}
+    .row{display:flex;gap:10px; flex-wrap:wrap}
+    .field{display:flex;flex-direction:column;gap:6px; width:100%}
+    label{font-size:12px;color:var(--muted)}
+    input, button{
+      border-radius:12px; border:1px solid var(--line); background:#0f0f18; color:var(--text);
+      padding:10px 10px; font-size:14px; outline:none;
+    }
+    input:focus{border-color:#f59e0b}
+    button{cursor:pointer; background:linear-gradient(135deg,#fbbf24,#f59e0b,#d97706); border:none; color:#120b02; font-weight:800;}
+    button.secondary{background:var(--pill); color:var(--text); border:1px solid var(--line); font-weight:700;}
+    .tabs{display:flex;gap:8px; flex-wrap:wrap}
+    .tab{padding:8px 10px;border-radius:999px;background:var(--pill); border:1px solid var(--line); color:var(--text); font-size:12px; cursor:pointer;}
+    .tab.active{border-color:#f59e0b; box-shadow:0 0 0 3px rgba(245,158,11,.15);}
+    .meta{display:flex;justify-content:space-between;align-items:center;margin:10px 0;color:var(--muted); font-size:12px}
+    table{width:100%;border-collapse:collapse; overflow:hidden; border-radius:14px; border:1px solid var(--line);}
+    th, td{padding:10px 10px;border-bottom:1px solid var(--line); text-align:left; font-size:13px;}
+    th{background:#0f0f18;color:#fff; font-size:12px; letter-spacing:.02em; text-transform:uppercase}
+    tr:hover td{background:rgba(245,158,11,.06)}
+    .pill{display:inline-flex;align-items:center;gap:6px;padding:6px 10px;border-radius:999px;background:rgba(245,158,11,.12); border:1px solid rgba(245,158,11,.3); color:#ffd9a0; font-size:12px}
+    .small{font-size:12px;color:var(--muted); line-height:1.45}
+    .footerNote{margin-top:10px;color:var(--muted); font-size:12px}
+    .error{color:#ffb4b4}
+    .hr{height:1px;background:var(--line); margin:12px 0;}
+    .hint{font-size:12px;color:var(--muted); margin-top:6px}
+    .kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-size:12px; padding:2px 6px; border-radius:8px; background:#0f0f18; border:1px solid var(--line);}
+    a{color:#ffd9a0}
+  </style>
+</head>
+<body>
+<header>
+  <div class="wrap brand">
+    <div class="logo" aria-hidden="true"></div>
+    <div>
+      <h1>DJ Royalty – Save-The-Set™</h1>
+      <div class="sub">Click a genre → auto-load 50 tracks with Artist • Title • BPM • Year (Spotify-powered)</div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <div class="grid">
+
+    <section class="card">
+      <h2>Controls</h2>
+
+      <div class="row">
+        <button id="connectBtn" class="secondary" style="flex:1">Connect Spotify (for BPM)</button>
+        <button id="logoutBtn" class="secondary" style="flex:1">Disconnect</button>
+      </div>
+
+      <div class="hint">
+        If you see “redirect_uri mismatch”, your Spotify app Redirect URI must EXACTLY match this page URL.
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="field">
+        <label>Genre</label>
+        <div id="tabs" class="tabs"></div>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <div class="field" style="flex:1">
+          <label>Optional filter (after load): Search Artist/Title</label>
+          <input id="q" placeholder="Type to filter the loaded 50..." />
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="field" style="flex:1; min-width:150px">
+          <label>BPM Min</label>
+          <input id="bpmMin" type="number" inputmode="numeric" placeholder="e.g., 90" />
+        </div>
+        <div class="field" style="flex:1; min-width:150px">
+          <label>BPM Max</label>
+          <input id="bpmMax" type="number" inputmode="numeric" placeholder="e.g., 110" />
+        </div>
+      </div>
+
+      <div class="row">
+        <div class="field" style="flex:1; min-width:150px">
+          <label>Year From</label>
+          <input id="yearFrom" type="number" inputmode="numeric" placeholder="e.g., 2005" />
+        </div>
+        <div class="field" style="flex:1; min-width:150px">
+          <label>Year To</label>
+          <input id="yearTo" type="number" inputmode="numeric" placeholder="e.g., 2024" />
+        </div>
+      </div>
+
+      <div class="row" style="margin-top:10px">
+        <button id="refresh" style="flex:1">Shuffle Again (new 50)</button>
+      </div>
+
+      <div id="status" class="footerNote small"></div>
+    </section>
+
+    <section class="card">
+      <div class="meta">
+        <div class="pill">Results: <span id="count">0</span></div>
+        <div class="small">Powered by DJ Royalty – Save-The-Set™</div>
+      </div>
+
+      <div style="overflow:auto">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:32%">Artist</th>
+              <th style="width:38%">Title</th>
+              <th style="width:10%">BPM</th>
+              <th style="width:10%">Year</th>
+              <th style="width:10%">Genre</th>
+            </tr>
+          </thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+
+      <div class="footerNote small">
+        BPM comes from Spotify Audio Features (tempo). :contentReference[oaicite:6]{index=6}
+      </div>
+    </section>
+
+  </div>
+</main>
+
+<script>
+/**
+ * DJ Royalty – Save-The-Set™
+ * Spotify Authorization Code with PKCE (recommended for SPAs). :contentReference[oaicite:7]{index=7}
+ * Uses:
+ * - /v1/recommendations (if available) OR fallback /v1/search :contentReference[oaicite:8]{index=8}
+ * - /v1/audio-features?ids=... for tempo (BPM) :contentReference[oaicite:9]{index=9}
+ */
+
+/* ================== CONFIG (YOU MUST EDIT THESE 2) ================== */
+const SPOTIFY_CLIENT_ID = "e70a33848ea14a359b903da31a27b38b";
+const REDIRECT_URI = "https://kingandqueenservices.com/dj-royalty-save-the-set"; // EXACT page URL registered in Spotify app settings
+/* =================================================================== */
+
+const GENRES = ["Hip-Hop","R&B","Amapiano","House","Pop","Techno","Reggaeton","Island/Caribbean"];
+// Spotify seed genres are specific strings. We'll map your genres to Spotify-ish seeds.
+// If recommendations endpoint errors/404, we fall back to Search queries.
+const SPOTIFY_SEED_GENRES = {
+  "Hip-Hop": ["hip-hop","rap","trap"],
+  "R&B": ["r-n-b","soul"],
+  "Amapiano": ["afro-house","south-african-house"],
+  "House": ["house","deep-house"],
+  "Pop": ["pop","dance-pop"],
+  "Techno": ["techno","minimal-techno"],
+  "Reggaeton": ["reggaeton","latin"],
+  "Island/Caribbean": ["dancehall","reggae","soca"]
+};
+const SEARCH_SEEDS = {
+  "Hip-Hop": ["hip hop hits", "rap club", "trap hits"],
+  "R&B": ["r&b party", "r&b hits", "soul r&b"],
+  "Amapiano": ["amapiano", "log drum", "kabza de small"],
+  "House": ["house hits", "deep house", "classic house"],
+  "Pop": ["pop hits", "dance pop", "top pop"],
+  "Techno": ["techno", "warehouse techno", "peak time techno"],
+  "Reggaeton": ["reggaeton hits", "latin urbano", "perreo"],
+  "Island/Caribbean": ["dancehall hits", "soca", "reggae hits"]
+};
+
+const LS_TOKEN = "djroyalty_spotify_token_v1";
+const LS_VERIFIER = "djroyalty_spotify_verifier_v1";
+const LS_STATE = "djroyalty_spotify_state_v1";
+
+const state = {
+  genre: "Hip-Hop",
+  loaded: [],     // last loaded 50
+  filtered: []    // view after filters
+};
+
+const el = (id) => document.getElementById(id);
+const normalize = (s) => (s ?? "").toString().trim().toLowerCase();
+function escapeHtml(str) {
+  return (str ?? "").toString()
+    .replaceAll("&","&amp;")
+    .replaceAll("<","&lt;")
+    .replaceAll(">","&gt;")
+    .replaceAll('"',"&quot;")
+    .replaceAll("'","&#039;");
+}
+function setStatus(msg, isError=false){
+  const s = el("status");
+  s.innerHTML = isError ? `<span class="error">${escapeHtml(msg)}</span>` : escapeHtml(msg);
+}
+
+/* ------------------ PKCE Helpers (Browser-safe) ------------------ */
+function randomString(len=64) {
+  const charset = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-._~";
+  const bytes = new Uint8Array(len);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, b => charset[b % charset.length]).join("");
+}
+async function sha256(plain) {
+  const enc = new TextEncoder();
+  const digest = await crypto.subtle.digest("SHA-256", enc.encode(plain));
+  return new Uint8Array(digest);
+}
+function base64UrlEncode(bytes) {
+  let str = "";
+  bytes.forEach(b => str += String.fromCharCode(b));
+  return btoa(str).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+async function pkceChallengeFromVerifier(verifier) {
+  const hashed = await sha256(verifier);
+  return base64UrlEncode(hashed);
+}
+
+/* ------------------ Token Storage ------------------ */
+function saveToken(tokenObj) {
+  localStorage.setItem(LS_TOKEN, JSON.stringify(tokenObj));
+}
+function loadToken() {
+  try {
+    const raw = localStorage.getItem(LS_TOKEN);
+    if (!raw) return null;
+    const t = JSON.parse(raw);
+    if (!t?.access_token || !t?.expires_at) return null;
+    return t;
+  } catch { return null; }
+}
+function clearToken() {
+  localStorage.removeItem(LS_TOKEN);
+}
+function tokenValid(t) {
+  if (!t) return false;
+  return Date.now() < (t.expires_at - 30_000); // 30s safety margin
+}
+
+/* ------------------ Spotify Auth (PKCE) ------------------ */
+async function startSpotifyLogin() {
+  if (!SPOTIFY_CLIENT_ID || SPOTIFY_CLIENT_ID.includes("PASTE_")) {
+    setStatus("Set SPOTIFY_CLIENT_ID in the code first.", true);
+    return;
+  }
+  if (!REDIRECT_URI || REDIRECT_URI.includes("PASTE_")) {
+    setStatus("Set REDIRECT_URI (your exact page URL) in the code first.", true);
+    return;
+  }
+
+  const verifier = randomString(64);
+  const challenge = await pkceChallengeFromVerifier(verifier);
+  const stateParam = randomString(24);
+
+  localStorage.setItem(LS_VERIFIER, verifier);
+  localStorage.setItem(LS_STATE, stateParam);
+
+  const params = new URLSearchParams({
+    response_type: "code",
+    client_id: SPOTIFY_CLIENT_ID,
+    redirect_uri: REDIRECT_URI,
+    code_challenge_method: "S256",
+    code_challenge: challenge,
+    state: stateParam
+    // No scopes needed for recommendations + audio-features (public endpoints),
+    // but Spotify still supports adding scopes if you expand later. :contentReference[oaicite:10]{index=10}
+  });
+
+  const authUrl = `https://accounts.spotify.com/authorize?${params.toString()}`;
+
+// GoDaddy Website Builder often runs custom HTML in an iframe.
+// Force top-level navigation so the Spotify page actually opens.
+try {
+  if (window.top && window.top !== window) {
+    window.top.location.assign(authUrl);
+  } else {
+    window.location.assign(authUrl);
+  }
+} catch (e) {
+  // Fallback: open a new tab if top navigation is blocked
+  window.open(authUrl, "_blank", "noopener,noreferrer");
+}
+}
+
+async function handleSpotifyRedirect() {console.log("REDIRECT_URI in code =", REDIRECT_URI, "| current page =", window.location.origin + window.location.pathname);
+  const url = new URL(window.location.href);
+  const code = url.searchParams.get("code");
+  const returnedState = url.searchParams.get("state");
+  const err = url.searchParams.get("error");
+
+  if (err) {
+    setStatus(`Spotify login error: ${err}`, true);
+    return;
+  }
+  if (!code) return;
+
+  const expectedState = localStorage.getItem(LS_STATE);
+  if (!expectedState || returnedState !== expectedState) {
+    setStatus("Spotify login state mismatch. Try again.", true);
+    return;
+  }
+
+  const verifier = localStorage.getItem(LS_VERIFIER);
+  if (!verifier) {
+    setStatus("Missing PKCE verifier. Try connecting again.", true);
+    return;
+  }
+
+  const body = new URLSearchParams({
+    client_id: SPOTIFY_CLIENT_ID,
+    grant_type: "authorization_code",
+    code,
+    redirect_uri: REDIRECT_URI,
+    code_verifier: verifier
+  });
+
+  try {
+    const res = await fetch("https://accounts.spotify.com/api/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      setStatus(`Token exchange failed. (${res.status}) ${text}`, true);
+      return;
+    }
+    const data = await res.json();
+    const tokenObj = {
+      access_token: data.access_token,
+      token_type: data.token_type,
+      expires_in: data.expires_in,
+      obtained_at: Date.now(),
+      expires_at: Date.now() + (data.expires_in * 1000)
+    };
+    saveToken(tokenObj);
+
+    // clean URL
+    url.searchParams.delete("code");
+    url.searchParams.delete("state");
+    url.searchParams.delete("error");
+    window.history.replaceState({}, document.title, url.toString());
+
+    setStatus("Spotify connected ✅ Now click a genre to load 50 tracks with BPM.");
+  } catch (e) {
+    setStatus("Token exchange error. Try again.", true);
+  }
+}
+
+/* ------------------ Spotify API Calls ------------------ */
+async function spotifyGET(path, token) {
+  const res = await fetch(`https://api.spotify.com${path}`, {
+    headers: { Authorization: `Bearer ${token.access_token}` }
+  });
+  // If expired mid-call, clear token so UI prompts reconnect
+  if (res.status === 401) clearToken();
+  return res;
+}
+
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function yearFromReleaseDate(dateStr) {
+  // release_date can be YYYY, YYYY-MM, or YYYY-MM-DD
+  if (!dateStr) return null;
+  const m = /^(\d{4})/.exec(dateStr);
+  return m ? Number(m[1]) : null;
+}
+
+async function fetch50ByRecommendations(genreClicked, token) {
+  const seeds = SPOTIFY_SEED_GENRES[genreClicked] || [];
+  const chosen = shuffle(seeds).slice(0, 2); // limit seeds
+  if (!chosen.length) throw new Error("No seed genres mapped");
+
+  const params = new URLSearchParams({
+    limit: "50",
+    seed_genres: chosen.join(",")
+  });
+
+  // recommendations endpoint reference :contentReference[oaicite:11]{index=11}
+  const res = await spotifyGET(`/v1/recommendations?${params.toString()}`, token);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Recommendations failed (${res.status}): ${text}`);
+  }
+  const data = await res.json();
+  const tracks = data.tracks || [];
+  return tracks;
+}
+
+async function fetch50BySearchFallback(genreClicked, token) {
+  // Search endpoint reference :contentReference[oaicite:12]{index=12}
+  const seeds = SEARCH_SEEDS[genreClicked] || [genreClicked];
+  const seed = seeds[Math.floor(Math.random() * seeds.length)];
+
+  // Random offset to vary results
+  const offset = Math.floor(Math.random() * 200); // Spotify allows offset up to 1000
+  const params = new URLSearchParams({
+    q: seed,
+    type: "track",
+    limit: "50",
+    offset: String(offset)
+  });
+
+  const res = await spotifyGET(`/v1/search?${params.toString()}`, token);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Search failed (${res.status}): ${text}`);
+  }
+  const data = await res.json();
+  return data?.tracks?.items || [];
+}
+
+async function fetchAudioFeatures(trackIds, token) {
+  // Audio Features endpoint reference :contentReference[oaicite:13]{index=13}
+  const ids = trackIds.join(",");
+  const res = await spotifyGET(`/v1/audio-features?ids=${encodeURIComponent(ids)}`, token);
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Audio features failed (${res.status}): ${text}`);
+  }
+  const data = await res.json();
+  return data.audio_features || [];
+}
+
+async function loadGenreSpotify(genreClicked) {
+  const token = loadToken();
+  if (!tokenValid(token)) {
+    setStatus("Connect Spotify to auto-load songs + BPM. Click “Connect Spotify (for BPM)”.", true);
+    return;
+  }
+
+  setStatus(`Loading 50 ${genreClicked} tracks from Spotify...`);
+
+  let tracks = [];
+  try {
+    tracks = await fetch50ByRecommendations(genreClicked, token);
+  } catch (e) {
+    // Fallback if recommendations errors/changes
+    try {
+      tracks = await fetch50BySearchFallback(genreClicked, token);
+    } catch (e2) {
+      setStatus(String(e2.message || e2), true);
+      return;
+    }
+  }
+
+  const ids = tracks.map(t => t.id).filter(Boolean);
+  const features = await fetchAudioFeatures(ids, token);
+
+  const featMap = new Map(features.filter(Boolean).map(f => [f.id, f]));
+  const mapped = tracks.map(t => {
+    const f = featMap.get(t.id);
+    const year = yearFromReleaseDate(t?.album?.release_date);
+    return {
+      genre: genreClicked,
+      artist: (t.artists || []).map(a => a.name).join(", ") || "",
+      title: t.name || "",
+      bpm: f?.tempo ? Math.round(f.tempo) : null,
+      year: year ?? "",
+      _id: `sp|${t.id}`
+    };
+  }).filter(x => x.artist && x.title);
+
+  state.loaded = mapped;
+  applyFiltersAndRender();
+  setStatus(`Loaded 50 ${genreClicked} tracks with BPM + Year ✅`);
+}
+
+/* ------------------ Table Render + Filters ------------------ */
+function renderRows(list) {
+  const rows = el("rows");
+  rows.innerHTML = "";
+  for (const s of list) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${escapeHtml(s.artist)}</td>
+      <td>${escapeHtml(s.title)}</td>
+      <td>${escapeHtml(s.bpm == null ? "—" : String(s.bpm))}</td>
+      <td>${escapeHtml(String(s.year ?? ""))}</td>
+      <td>${escapeHtml(s.genre)}</td>
+    `;
+    rows.appendChild(tr);
+  }
+  el("count").textContent = String(list.length);
+}
+
+function applyFiltersAndRender() {
+  const q = normalize(el("q").value);
+  const bpmMin = el("bpmMin").value ? Number(el("bpmMin").value) : null;
+  const bpmMax = el("bpmMax").value ? Number(el("bpmMax").value) : null;
+  const yearFrom = el("yearFrom").value ? Number(el("yearFrom").value) : null;
+  const yearTo = el("yearTo").value ? Number(el("yearTo").value) : null;
+
+  const list = state.loaded.filter(s => {
+    if (q) {
+      const a = normalize(s.artist);
+      const t = normalize(s.title);
+      if (!a.includes(q) && !t.includes(q)) return false;
+    }
+    if (bpmMin !== null && (s.bpm ?? -1) < bpmMin) return false;
+    if (bpmMax !== null && (s.bpm ?? 9999) > bpmMax) return false;
+
+    const yr = Number(s.year) || null;
+    if (yearFrom !== null && yr !== null && yr < yearFrom) return false;
+    if (yearTo !== null && yr !== null && yr > yearTo) return false;
+
+    return true;
+  });
+
+  state.filtered = list;
+  renderRows(list);
+}
+
+/* ------------------ UI: Tabs ------------------ */
+function buildTabs() {
+  const tabs = el("tabs");
+  tabs.innerHTML = "";
+  for (const g of GENRES) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "tab" + (g === state.genre ? " active" : "");
+    b.textContent = g;
+    b.onclick = async () => {
+      state.genre = g;
+      [...tabs.children].forEach(x => x.classList.remove("active"));
+      b.classList.add("active");
+      await loadGenreSpotify(g);
+    };
+    tabs.appendChild(b);
+  }
+}
+
+/* ------------------ Buttons ------------------ */
+function disconnectSpotify() {
+  clearToken();
+  setStatus("Spotify disconnected.");
+}
+
+function wireInputs() {
+  el("connectBtn").addEventListener("click", startSpotifyLogin);
+  el("logoutBtn").addEventListener("click", disconnectSpotify);
+
+  ["q","bpmMin","bpmMax","yearFrom","yearTo"].forEach(id => {
+    el(id).addEventListener("input", applyFiltersAndRender);
+  });
+
+  el("refresh").addEventListener("click", async () => {
+    await loadGenreSpotify(state.genre);
+  });
+}
+
+/* ------------------ Init ------------------ */
+(async function init(){
+  buildTabs();
+  wireInputs();
+  await handleSpotifyRedirect();
+
+  const token = loadToken();
+  if (tokenValid(token)) {
+    setStatus("Spotify connected ✅ Click a genre to load 50 tracks with BPM + Year.");
+  } else {
+    setStatus("Click “Connect Spotify (for BPM)” to enable auto genre loading.");
+  }
+})();
+</script>
+</body>
+</html>
