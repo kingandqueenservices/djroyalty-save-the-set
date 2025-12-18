@@ -398,13 +398,12 @@ async function fetchAudioFeatures(trackIds, token) {
   const ids = trackIds.join(",");
   const res = await spotifyGET(`/v1/audio-features?ids=${encodeURIComponent(ids)}`, token);
 
-  // Read the raw body first so we can log real Spotify errors
+  // Read the raw body so we can see Spotify's real reason (instead of only status code)
   const text = await res.text();
 
-  // 403 happens for some app/account states. Don’t crash the app.
+  // 403 means Spotify is blocking this endpoint for this token/app. Don’t crash; return no BPM.
   if (res.status === 403) {
     console.warn("Audio-features 403 body:", text);
-    // Graceful fallback: songs still load, BPM will show "—"
     return [];
   }
 
